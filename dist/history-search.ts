@@ -2343,13 +2343,16 @@ async function serveSearchProcess(executeSearch) {
     if (request.type !== "search") {
       throw new Error("Invalid history search process request");
     }
-    response = { type: "result", value: await executeSearch(request.args) };
+    response = {
+      type: "result",
+      value: await executeSearch(request.args, request.sessionID)
+    };
   } catch (error) {
     response = { type: "error", error: serializeError(error) };
   }
   await Bun.write(Bun.stdout, JSON.stringify(response));
 }
-async function runSearchInProcess(args, scriptUrl, signal) {
+async function runSearchInProcess(args, scriptUrl, signal, sessionID) {
   if (signal?.aborted)
     throw abortError(signal);
   const bunPath = findBunExecutable();
@@ -2363,7 +2366,7 @@ async function runSearchInProcess(args, scriptUrl, signal) {
     stderr: "pipe",
     signal
   });
-  const request = { type: "search", args };
+  const request = { type: "search", args, sessionID };
   try {
     proc.stdin.write(JSON.stringify(request));
     proc.stdin.end();
@@ -2394,10 +2397,7 @@ async function runSearchInProcess(args, scriptUrl, signal) {
 }
 
 // src/index.ts
-async function executeSearch({
-  args,
-  sessionID
-}) {
+async function executeSearch(args, sessionID) {
   if (!args.query && !args.filePath && !args.terms) {
     throw new Error("Either 'query', 'terms', or 'filePath' must be provided.");
   }
@@ -2482,7 +2482,7 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
     role: tool.schema.enum(["user", "assistant"]).optional().describe("Filter by message role: 'user' for your messages only, 'assistant' for AI responses only. Ignored if filePath is provided.")
   },
   async execute(args, context) {
-    return runSearchInProcess({ args, sessionID: context?.sessionID }, import.meta.url, context?.abort);
+    return runSearchInProcess(args, import.meta.url, context?.abort, context?.sessionID);
   }
 });
 historySearch.id = "opencode-history-search";

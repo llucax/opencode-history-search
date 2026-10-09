@@ -25,16 +25,10 @@ interface HistorySearchArgs {
   role?: "user" | "assistant";
 }
 
-interface HistorySearchRequest {
-  args: HistorySearchArgs;
-  /** The session calling the tool, whose context is left out of results. */
-  sessionID?: string;
-}
-
-async function executeSearch({
-  args,
-  sessionID,
-}: HistorySearchRequest): Promise<string> {
+async function executeSearch(
+  args: HistorySearchArgs,
+  sessionID?: string,
+): Promise<string> {
   if (!args.query && !args.filePath && !args.terms) {
     throw new Error("Either 'query', 'terms', or 'filePath' must be provided.");
   }
@@ -183,9 +177,10 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
 
   async execute(args, context) {
     return runSearchInProcess(
-      { args, sessionID: context?.sessionID },
+      args,
       import.meta.url,
       context?.abort,
+      context?.sessionID,
     );
   },
 });

@@ -5,9 +5,14 @@ import { fileURLToPath } from "node:url";
 
 const SEARCH_PROCESS_ARG = "--opencode-history-search-process";
 
+// The parent runs the plugin as OpenCode loaded it at startup, but the child
+// runs the bundle as it is on disk now, which an update may have replaced:
+// keep requests readable by both, adding only optional fields.
 interface SearchProcessRequest<Args> {
   type: "search";
   args: Args;
+  /** The session calling the tool. */
+  sessionID?: string;
 }
 
 interface SerializedError {
@@ -80,7 +85,7 @@ export function isSearchProcess(): boolean {
 }
 
 export async function serveSearchProcess<Args>(
-  executeSearch: (args: Args) => Promise<string>,
+  executeSearch: (args: Args, sessionID?: string) => Promise<string>,
 ): Promise<void> {
   let response: SearchProcessResponse;
   try {
@@ -90,7 +95,10 @@ export async function serveSearchProcess<Args>(
     if (request.type !== "search") {
       throw new Error("Invalid history search process request");
     }
-    response = { type: "result", value: await executeSearch(request.args) };
+    response = {
+      type: "result",
+      value: await executeSearch(request.args, request.sessionID),
+    };
   } catch (error) {
     response = { type: "error", error: serializeError(error) };
   }
@@ -102,6 +110,7 @@ export async function runSearchInProcess<Args>(
   args: Args,
   scriptUrl: string | URL,
   signal?: AbortSignal,
+  sessionID?: string,
 ): Promise<string> {
   if (signal?.aborted) throw abortError(signal);
 
@@ -120,7 +129,7 @@ export async function runSearchInProcess<Args>(
     signal,
   });
 
-  const request: SearchProcessRequest<Args> = { type: "search", args };
+  const request: SearchProcessRequest<Args> = { type: "search", args, sessionID };
   try {
     proc.stdin.write(JSON.stringify(request));
     proc.stdin.end();

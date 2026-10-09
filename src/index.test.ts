@@ -27,6 +27,18 @@ describe("historySearch tool", () => {
     expect(await search).toBe("completed");
   });
 
+  test("search process receives the calling session", async () => {
+    const echo = new URL("./test-fixtures/echo-search-process.ts", import.meta.url);
+
+    expect(
+      JSON.parse(await runSearchInProcess({ query: "q" }, echo, undefined, "ses_x")),
+    ).toEqual({ args: { query: "q" }, sessionID: "ses_x" });
+    // Requests from a parent loaded before the session ID was sent.
+    expect(JSON.parse(await runSearchInProcess({ query: "q" }, echo))).toEqual({
+      args: { query: "q" },
+    });
+  });
+
   test("search process errors are returned to the caller", async () => {
     await expect((historySearch as any).execute({})).rejects.toThrow(
       "Either 'query', 'terms', or 'filePath' must be provided.",
