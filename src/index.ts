@@ -1,4 +1,4 @@
-import { getCurrentProjectID } from "./storage-provider";
+import { getCurrentProjectID, getInContext } from "./storage-provider";
 import { searchKeyword } from "./search/keyword";
 import { searchFuzzy } from "./search/fuzzy";
 import { parseDateFilter, filterByDate } from "./search/date-filter";
@@ -25,10 +25,21 @@ interface HistorySearchArgs {
   role?: "user" | "assistant";
 }
 
-async function executeSearch(args: HistorySearchArgs): Promise<string> {
+interface HistorySearchRequest {
+  args: HistorySearchArgs;
+  /** The session calling the tool, whose context is left out of results. */
+  sessionID?: string;
+}
+
+async function executeSearch({
+  args,
+  sessionID,
+}: HistorySearchRequest): Promise<string> {
   if (!args.query && !args.filePath && !args.terms) {
     throw new Error("Either 'query', 'terms', or 'filePath' must be provided.");
   }
+
+  const inContext = await getInContext(sessionID);
 
   if (args.terms !== undefined) {
     if (!Array.isArray(args.terms) || args.terms.length === 0) {
@@ -40,6 +51,7 @@ async function executeSearch(args: HistorySearchArgs): Promise<string> {
       const projectID = args.searchAllProjects ? null : await getCurrentProjectID();
       let matches = await searchMultiterm(projectID, args.terms, {
         limit: args.limit,
+        inContext,
       });
       if (args.date) {
         const dateRange = parseDateFilter(args.date);
@@ -54,6 +66,7 @@ async function executeSearch(args: HistorySearchArgs): Promise<string> {
   if (args.filePath) {
     let matches = await traceFile(projectID, args.filePath, {
       limit: args.limit,
+      inContext,
     });
 
     if (args.date) {
@@ -74,12 +87,14 @@ async function executeSearch(args: HistorySearchArgs): Promise<string> {
           threshold: args.fuzzyThreshold,
           limit: args.limit,
           role: args.role,
+          inContext,
         })
       : await searchKeyword(projectID, args.query, {
           regex: args.regex,
           caseSensitive: args.caseSensitive,
           limit: args.limit,
           role: args.role,
+          inContext,
         });
 
   if (args.date) {
@@ -167,7 +182,11 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
   },
 
   async execute(args, context) {
-    return runSearchInProcess(args, import.meta.url, context?.abort);
+    return runSearchInProcess(
+      { args, sessionID: context?.sessionID },
+      import.meta.url,
+      context?.abort,
+    );
   },
 });
 (historySearch as any).id = "opencode-history-search";
